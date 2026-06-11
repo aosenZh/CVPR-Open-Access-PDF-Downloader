@@ -1,0 +1,12 @@
+{
+  "conference_url": "https://openaccess.thecvf.com/CVPR2026",
+  "fallback_all_papers_urls": [
+    "https://openaccess.thecvf.com/CVPR2026?day=all"
+  ],
+  "default_download_root": "downloads/default",
+  "paper_parse_limit": 0,
+  "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CVPR2026Downloader/1.0",
+  "request_delay_seconds": [2, 6],
+  "post_download_delay_seconds": [3, 8],
+  "max_retries": 3
+}
