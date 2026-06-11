@@ -14,7 +14,7 @@ A local desktop tool with a Tkinter GUI for browsing, classifying, and downloadi
 ## Project Structure
 
 ```text
-cvpr2026_downloader/
+cvpr_downloader/
 ├── main.py                 # Entry point
 ├── config.json             # Crawler & download settings
 ├── requirements.txt
