@@ -17,7 +17,7 @@ PAPERS_WITH_CATEGORIES_PATH = PROJECT_ROOT / "data" / "papers_with_categories.js
 
 TEXT = {
     "zh": {
-        "app_title": "CVPR 2026 Open Access PDF Downloader",
+        "app_title": "CVPR Open Access PDF Downloader",
         "download_root": "下载根目录",
         "choose": "选择",
         "language": "语言",
@@ -73,7 +73,7 @@ TEXT = {
         "language_switched": "语言已切换。",
     },
     "en": {
-        "app_title": "CVPR 2026 Open Access PDF Downloader",
+        "app_title": "CVPR Open Access PDF Downloader",
         "download_root": "Download Root",
         "choose": "Choose",
         "language": "Language",
