@@ -3,6 +3,8 @@
 A local desktop tool with a Tkinter GUI for browsing, classifying, and downloading CVPR Open Access papers. Parse paper metadata from the CVF website, cache it locally, and save PDFs into custom category folders through user-controlled, rate-limited workflows.
 > **Note:** Defaults target [CVPR 2026](https://openaccess.thecvf.com/CVPR2026). To use another year, update `conference_url` in `config.json` and reinitialize the paper list.
 
+![Open Access PDF Downloader GUI](data/GUI.png)
+
 ## How It Works
 
 1. On startup, load cached papers from `data/papers.json` if available.
