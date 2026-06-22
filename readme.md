@@ -11,6 +11,10 @@ A local desktop tool with a Tkinter GUI for browsing, classifying, and downloadi
 4. Optionally run **Auto Classify** to apply user-provided categories from `data/papers_with_categories.json` and download papers with the configured rate limits.
 5. Progress and preferences persist in `data/state.json`.
 
+Use **重新初始化论文列表** / **Reinitialize Paper List** when you need to rebuild `data/papers.json`. The crawler validates parsed PDF URLs and refuses to cache results when all PDF links collapse to the same URL.
+
+Use **重新初始化下载进度** / **Reset Progress** to reset `data/state.json` download progress and records while keeping the current download root and language preference.
+
 ## Project Structure
 
 ```text

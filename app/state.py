@@ -27,6 +27,14 @@ def save_state(state: Dict[str, Any]) -> None:
     save_json(STATE_PATH, state)
 
 
+def reset_state(download_root: str, language: str) -> Dict[str, Any]:
+    state = DEFAULT_STATE.copy()
+    state["download_root"] = download_root
+    state["language"] = language
+    save_state(state)
+    return state
+
+
 def set_current_index(state: Dict[str, Any], index: int, total: int) -> None:
     if total <= 0:
         state["current_index"] = 0

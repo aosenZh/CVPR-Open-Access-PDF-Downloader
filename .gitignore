@@ -3,5 +3,5 @@ __pycache__/
 venv/
 downloads/
 data/logs.txt
-data/state.json
+
 

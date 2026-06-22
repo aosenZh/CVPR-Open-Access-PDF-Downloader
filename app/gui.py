@@ -7,7 +7,7 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from .crawler import PAPERS_PATH, initialize_papers
 from .downloader import download_pdf
-from .state import load_state, record_download, save_state, set_current_index
+from .state import load_state, record_download, reset_state, save_state, set_current_index
 from .utils import PROJECT_ROOT, clean_filename, log_error, recent_logs, resolve_project_path
 
 
@@ -35,6 +35,7 @@ TEXT = {
         "stop_auto_classify": "中止自动分类",
         "pause_save": "暂停并保存",
         "reinitialize": "重新初始化论文列表",
+        "reset_progress": "重新初始化下载进度",
         "recent_logs": "最近日志",
         "init_failed": "初始化失败",
         "loaded_cache": "已从缓存加载 {count} 篇论文。",
@@ -66,6 +67,9 @@ TEXT = {
         "auto_done": "自动分类完成。已下载 {downloaded} 篇，跳过 {skipped} 篇，失败 {failed} 篇。",
         "saved_title": "已保存",
         "saved": "当前进度已保存。",
+        "reset_progress_title": "重新初始化下载进度",
+        "reset_progress_confirm": "确定要清空下载进度、跳过记录和分类记录吗？\n\n当前下载目录和语言设置会保留。",
+        "reset_progress_done": "下载进度已重新初始化。",
         "language_switched": "语言已切换。",
     },
     "en": {
@@ -87,6 +91,7 @@ TEXT = {
         "stop_auto_classify": "Stop Auto",
         "pause_save": "Pause and Save",
         "reinitialize": "Reinitialize Paper List",
+        "reset_progress": "Reset Progress",
         "recent_logs": "Recent Logs",
         "init_failed": "Initialization Failed",
         "loaded_cache": "Loaded {count} papers from cache.",
@@ -118,6 +123,9 @@ TEXT = {
         "auto_done": "Auto classification complete. Downloaded {downloaded}, skipped {skipped}, failed {failed}.",
         "saved_title": "Saved",
         "saved": "Current progress has been saved.",
+        "reset_progress_title": "Reset Download Progress",
+        "reset_progress_confirm": "Clear download progress, skipped items, and classification records?\n\nThe current download root and language setting will be kept.",
+        "reset_progress_done": "Download progress has been reset.",
         "language_switched": "Language switched.",
     },
 }
@@ -215,6 +223,7 @@ class CVPRDownloaderApp(tk.Tk):
         self._button(actions, "auto_classify", self.start_auto_classify).pack(side="left", padx=(8, 0))
         self._button(actions, "stop_auto_classify", self.stop_auto_classify).pack(side="left", padx=8)
         self._button(actions, "pause_save", self.pause_save).pack(side="left")
+        self._button(actions, "reset_progress", self.reset_progress).pack(side="left", padx=8)
         self._button(actions, "reinitialize", lambda: self.load_papers_async(force=True)).pack(side="right")
 
         self.log_frame = ttk.LabelFrame(self, padding=8)
@@ -582,6 +591,17 @@ class CVPRDownloaderApp(tk.Tk):
         save_state(self.state_data)
         self.update_logs()
         messagebox.showinfo(self.t("saved_title"), self.t("saved"))
+
+    def reset_progress(self) -> None:
+        if self.is_busy:
+            return
+        confirmed = messagebox.askyesno(self.t("reset_progress_title"), self.t("reset_progress_confirm"))
+        if not confirmed:
+            return
+        self.state_data = reset_state(self.root_var.get(), self.lang)
+        self.update_paper_display()
+        self.update_logs()
+        messagebox.showinfo(self.t("reset_progress_title"), self.t("reset_progress_done"))
 
     def update_logs(self) -> None:
         self.log_text.delete("1.0", tk.END)
