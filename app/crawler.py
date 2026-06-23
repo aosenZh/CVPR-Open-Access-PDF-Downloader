@@ -1,7 +1,8 @@
+import re
 import random
 import time
 from typing import Dict, List, Optional
-from urllib.parse import urljoin
+from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -10,6 +11,51 @@ from .utils import PROJECT_ROOT, load_json, log_error, save_json
 
 
 PAPERS_PATH = PROJECT_ROOT / "data" / "papers.json"
+
+
+def _safe_source_id(source_id: str) -> str:
+    safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", source_id).strip("._")
+    return safe or "default"
+
+
+def get_papers_path(source_id: str = ""):
+    if not source_id or source_id == "cvpr2026":
+        return PAPERS_PATH
+    return PROJECT_ROOT / "data" / f"papers_{_safe_source_id(source_id)}.json"
+
+
+def get_paper_sources(config: Dict) -> List[Dict]:
+    sources = config.get("paper_sources")
+    if not isinstance(sources, list) or not sources:
+        raise ValueError("config.json must define a non-empty paper_sources list.")
+
+    valid_sources = []
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        missing = [key for key in ("id", "name", "type", "conference_url") if not source.get(key)]
+        if missing:
+            raise ValueError(f"Invalid paper source config; missing {', '.join(missing)}: {source}")
+        valid_sources.append(source)
+
+    if not valid_sources:
+        raise ValueError("config.json paper_sources does not contain any valid sources.")
+    return valid_sources
+
+
+def get_paper_source(config: Dict, source_id: str = "") -> Dict:
+    sources = get_paper_sources(config)
+    default_id = source_id or config.get("default_paper_source") or sources[0]["id"]
+    for source in sources:
+        if source.get("id") == default_id:
+            return source
+    raise ValueError(f"Unknown paper source id: {default_id}")
+
+
+def _merged_source_config(config: Dict, source: Dict) -> Dict:
+    merged = dict(config)
+    merged.update(source)
+    return merged
 
 
 def polite_sleep(delay_range) -> None:
@@ -132,7 +178,7 @@ def _parse_paper_from_title_row(title_row, all_papers_url: str) -> Optional[Dict
     return {"title": title, "detail_url": detail_url, "pdf_url": pdf_url}
 
 
-def parse_papers(all_papers_html: str, all_papers_url: str, limit: Optional[int] = None) -> List[Dict[str, str]]:
+def parse_cvf_papers(all_papers_html: str, all_papers_url: str, limit: Optional[int] = None) -> List[Dict[str, str]]:
     soup = BeautifulSoup(all_papers_html, "html.parser")
     papers: List[Dict[str, str]] = []
     seen = set()
@@ -174,6 +220,122 @@ def parse_papers(all_papers_html: str, all_papers_url: str, limit: Optional[int]
     return papers
 
 
+def parse_papers(all_papers_html: str, all_papers_url: str, limit: Optional[int] = None) -> List[Dict[str, str]]:
+    return parse_cvf_papers(all_papers_html, all_papers_url, limit)
+
+
+def _is_pmlr_detail_href(href: str) -> bool:
+    return "proceedings.mlr.press/" in href and href.endswith(".html")
+
+
+def _derive_pmlr_pdf_url(detail_url: str) -> str:
+    parsed = urlparse(detail_url)
+    volume = parsed.path.strip("/").split("/", 1)[0]
+    base = detail_url.rsplit("/", 1)[-1].removesuffix(".html")
+    return f"https://raw.githubusercontent.com/mlresearch/{volume}/main/assets/{base}/{base}.pdf"
+
+
+def _parse_dblp_title(entry) -> str:
+    title_node = entry.select_one("span.title")
+    if title_node:
+        return title_node.get_text(" ", strip=True).rstrip(".")
+
+    cite = entry.select_one("cite.data")
+    if cite:
+        text = cite.get_text(" ", strip=True)
+        text = re.sub(r"\s+", " ", text)
+        return text.rstrip(".")
+
+    return ""
+
+
+def parse_dblp_pmlr_papers(dblp_html: str, dblp_url: str, limit: Optional[int] = None) -> List[Dict[str, str]]:
+    soup = BeautifulSoup(dblp_html, "html.parser")
+    papers: List[Dict[str, str]] = []
+    seen = set()
+
+    entries = soup.select("li.entry.inproceedings")
+    if not entries:
+        entries = soup.select("li.entry")
+
+    for entry in entries:
+        detail_link = entry.select_one('div.head a[href*="proceedings.mlr.press/"][href$=".html"]')
+        if not detail_link:
+            detail_link = entry.find("a", href=lambda href: bool(href and _is_pmlr_detail_href(href)))
+        if not detail_link:
+            continue
+
+        detail_url = urljoin(dblp_url, detail_link["href"])
+        if detail_url in seen:
+            continue
+
+        title = _parse_dblp_title(entry)
+        if not title:
+            title = detail_link.get_text(" ", strip=True) or detail_url.rsplit("/", 1)[-1].removesuffix(".html")
+
+        seen.add(detail_url)
+        papers.append(
+            {
+                "title": title,
+                "detail_url": detail_url,
+                "pdf_url": _derive_pmlr_pdf_url(detail_url),
+            }
+        )
+        if limit and len(papers) >= limit:
+            break
+
+    return papers
+
+
+def _is_openreview_forum_href(href: str) -> bool:
+    parsed = urlparse(href)
+    return parsed.netloc.endswith("openreview.net") and parsed.path == "/forum" and bool(parse_qs(parsed.query).get("id"))
+
+
+def _derive_openreview_pdf_url(detail_url: str) -> str:
+    parsed = urlparse(detail_url)
+    paper_id = parse_qs(parsed.query).get("id", [""])[0]
+    return urlunparse((parsed.scheme or "https", parsed.netloc or "openreview.net", "/pdf", "", urlencode({"id": paper_id}), ""))
+
+
+def parse_dblp_openreview_papers(dblp_html: str, dblp_url: str, limit: Optional[int] = None) -> List[Dict[str, str]]:
+    soup = BeautifulSoup(dblp_html, "html.parser")
+    papers: List[Dict[str, str]] = []
+    seen = set()
+
+    entries = soup.select("li.entry.inproceedings")
+    if not entries:
+        entries = soup.select("li.entry")
+
+    for entry in entries:
+        detail_link = entry.select_one('div.head a[href*="openreview.net/forum?id="]')
+        if not detail_link:
+            detail_link = entry.find("a", href=lambda href: bool(href and _is_openreview_forum_href(href)))
+        if not detail_link:
+            continue
+
+        detail_url = urljoin(dblp_url, detail_link["href"])
+        if detail_url in seen:
+            continue
+
+        title = _parse_dblp_title(entry)
+        if not title:
+            title = detail_link.get_text(" ", strip=True) or parse_qs(urlparse(detail_url).query).get("id", ["paper"])[0]
+
+        seen.add(detail_url)
+        papers.append(
+            {
+                "title": title,
+                "detail_url": detail_url,
+                "pdf_url": _derive_openreview_pdf_url(detail_url),
+            }
+        )
+        if limit and len(papers) >= limit:
+            break
+
+    return papers
+
+
 def _validate_pdf_urls(papers: List[Dict[str, str]]) -> None:
     if len(papers) < 2:
         return
@@ -183,13 +345,43 @@ def _validate_pdf_urls(papers: List[Dict[str, str]]) -> None:
         raise RuntimeError("Parsed PDF URLs are all identical; refusing to cache likely-bad paper data.")
 
 
-def _repair_pdf_urls_from_detail(papers: List[Dict[str, str]]) -> int:
+def _repair_cvf_pdf_urls_from_detail(papers: List[Dict[str, str]]) -> int:
     changed = 0
     for paper in papers:
         detail_url = paper.get("detail_url", "")
         if "/html/" not in detail_url or not detail_url.endswith(".html"):
             continue
         repaired_pdf_url = _derived_pdf_url(detail_url)
+        if paper.get("pdf_url") != repaired_pdf_url:
+            paper["pdf_url"] = repaired_pdf_url
+            changed += 1
+    return changed
+
+
+def _repair_pdf_urls_from_detail(papers: List[Dict[str, str]]) -> int:
+    return _repair_cvf_pdf_urls_from_detail(papers)
+
+
+def _repair_pmlr_pdf_urls_from_detail(papers: List[Dict[str, str]]) -> int:
+    changed = 0
+    for paper in papers:
+        detail_url = paper.get("detail_url", "")
+        if not _is_pmlr_detail_href(detail_url):
+            continue
+        repaired_pdf_url = _derive_pmlr_pdf_url(detail_url)
+        if paper.get("pdf_url") != repaired_pdf_url:
+            paper["pdf_url"] = repaired_pdf_url
+            changed += 1
+    return changed
+
+
+def _repair_openreview_pdf_urls_from_detail(papers: List[Dict[str, str]]) -> int:
+    changed = 0
+    for paper in papers:
+        detail_url = paper.get("detail_url", "")
+        if not _is_openreview_forum_href(detail_url):
+            continue
+        repaired_pdf_url = _derive_openreview_pdf_url(detail_url)
         if paper.get("pdf_url") != repaired_pdf_url:
             paper["pdf_url"] = repaired_pdf_url
             changed += 1
@@ -203,15 +395,24 @@ def _has_bad_duplicate_pdf_urls(papers: List[Dict[str, str]]) -> bool:
     return len(pdf_urls) >= 2 and len(set(pdf_urls)) <= 1
 
 
-def initialize_papers(config: Dict, force: bool = False) -> List[Dict[str, str]]:
-    if PAPERS_PATH.exists() and not force:
-        cached = load_json(PAPERS_PATH, [])
+def _parse_limit(config: Dict) -> Optional[int]:
+    parse_limit = config.get("paper_parse_limit")
+    if parse_limit is not None:
+        parse_limit = int(parse_limit)
+        if parse_limit <= 0:
+            parse_limit = None
+    return parse_limit
+
+
+def _initialize_cvf_papers(config: Dict, force: bool, papers_path) -> List[Dict[str, str]]:
+    if papers_path.exists() and not force:
+        cached = load_json(papers_path, [])
         if cached:
             if _has_bad_duplicate_pdf_urls(cached):
-                changed = _repair_pdf_urls_from_detail(cached)
+                changed = _repair_cvf_pdf_urls_from_detail(cached)
                 if changed:
                     log_error(f"Repaired {changed} duplicate cached PDF URLs from detail_url.")
-                    save_json(PAPERS_PATH, cached)
+                    save_json(papers_path, cached)
                 _validate_pdf_urls(cached)
             return cached
 
@@ -232,16 +433,11 @@ def initialize_papers(config: Dict, force: bool = False) -> List[Dict[str, str]]
         try:
             response = request_with_retries(url, config)
             polite_sleep(delay_range)
-            parse_limit = config.get("paper_parse_limit")
-            if parse_limit is not None:
-                parse_limit = int(parse_limit)
-                if parse_limit <= 0:
-                    parse_limit = None
-            papers = parse_papers(response.text, url, limit=parse_limit)
+            papers = parse_cvf_papers(response.text, url, limit=_parse_limit(config))
             if papers:
-                _repair_pdf_urls_from_detail(papers)
+                _repair_cvf_pdf_urls_from_detail(papers)
                 _validate_pdf_urls(papers)
-                save_json(PAPERS_PATH, papers)
+                save_json(papers_path, papers)
                 return papers
             errors.append(f"No papers parsed from {url}")
         except Exception as exc:
@@ -249,3 +445,69 @@ def initialize_papers(config: Dict, force: bool = False) -> List[Dict[str, str]]
             log_error(errors[-1])
 
     raise RuntimeError("Could not initialize paper list. " + " | ".join(errors))
+
+
+def _initialize_dblp_pmlr_papers(config: Dict, force: bool, papers_path) -> List[Dict[str, str]]:
+    if papers_path.exists() and not force:
+        cached = load_json(papers_path, [])
+        if cached:
+            changed = _repair_pmlr_pdf_urls_from_detail(cached)
+            if changed:
+                log_error(f"Repaired {changed} cached PMLR PDF URLs from detail_url.")
+                save_json(papers_path, cached)
+            if _has_bad_duplicate_pdf_urls(cached):
+                _validate_pdf_urls(cached)
+            return cached
+
+    conference_url = config["conference_url"]
+    delay_range = config.get("request_delay_seconds", [2, 6])
+    response = request_with_retries(conference_url, config)
+    polite_sleep(delay_range)
+    papers = parse_dblp_pmlr_papers(response.text, conference_url, limit=_parse_limit(config))
+    if not papers:
+        raise RuntimeError(f"Could not initialize paper list. No papers parsed from {conference_url}")
+    _repair_pmlr_pdf_urls_from_detail(papers)
+    _validate_pdf_urls(papers)
+    save_json(papers_path, papers)
+    return papers
+
+
+def _initialize_dblp_openreview_papers(config: Dict, force: bool, papers_path) -> List[Dict[str, str]]:
+    if papers_path.exists() and not force:
+        cached = load_json(papers_path, [])
+        if cached:
+            changed = _repair_openreview_pdf_urls_from_detail(cached)
+            if changed:
+                log_error(f"Repaired {changed} cached OpenReview PDF URLs from detail_url.")
+                save_json(papers_path, cached)
+            if _has_bad_duplicate_pdf_urls(cached):
+                _validate_pdf_urls(cached)
+            return cached
+
+    conference_url = config["conference_url"]
+    delay_range = config.get("request_delay_seconds", [2, 6])
+    response = request_with_retries(conference_url, config)
+    polite_sleep(delay_range)
+    papers = parse_dblp_openreview_papers(response.text, conference_url, limit=_parse_limit(config))
+    if not papers:
+        raise RuntimeError(f"Could not initialize paper list. No papers parsed from {conference_url}")
+    _repair_openreview_pdf_urls_from_detail(papers)
+    _validate_pdf_urls(papers)
+    save_json(papers_path, papers)
+    return papers
+
+
+def initialize_papers(config: Dict, force: bool = False, source_id: str = "") -> List[Dict[str, str]]:
+    source = get_paper_source(config, source_id)
+    source_config = _merged_source_config(config, source)
+    papers_path = get_papers_path(source.get("id", ""))
+    source_type = source_config["type"]
+
+    if source_type == "cvf_openaccess":
+        return _initialize_cvf_papers(source_config, force, papers_path)
+    if source_type == "dblp_pmlr":
+        return _initialize_dblp_pmlr_papers(source_config, force, papers_path)
+    if source_type == "dblp_openreview":
+        return _initialize_dblp_openreview_papers(source_config, force, papers_path)
+
+    raise ValueError(f"Unsupported paper source type: {source_type}")

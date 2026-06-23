@@ -3,5 +3,7 @@ __pycache__/
 venv/
 downloads/
 data/logs.txt
+data/papers_icml2024.json
+data/papers_with_categories.json
 
 

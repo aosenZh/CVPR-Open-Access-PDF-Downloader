@@ -9,8 +9,9 @@ STATE_PATH = PROJECT_ROOT / "data" / "state.json"
 
 DEFAULT_STATE: Dict[str, Any] = {
     "current_index": 0,
-    "download_root": "downloads/default",
+    "download_root": "downloads/CVPR 2026",
     "language": "zh",
+    "paper_source": "cvpr2026",
     "records": {},
     "skipped": []
 }

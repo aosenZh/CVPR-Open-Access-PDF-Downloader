@@ -5,7 +5,7 @@ import webbrowser
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
-from .crawler import PAPERS_PATH, initialize_papers
+from .crawler import get_paper_source, get_paper_sources, get_papers_path, initialize_papers
 from .downloader import download_pdf
 from .state import load_state, record_download, reset_state, save_state, set_current_index
 from .utils import PROJECT_ROOT, clean_filename, log_error, recent_logs, resolve_project_path
@@ -17,12 +17,13 @@ PAPERS_WITH_CATEGORIES_PATH = PROJECT_ROOT / "data" / "papers_with_categories.js
 
 TEXT = {
     "zh": {
-        "app_title": "CVPR Open Access PDF Downloader",
+        "app_title": "Conference Paper PDF Downloader",
         "download_root": "下载根目录",
         "choose": "选择",
         "language": "语言",
+        "paper_source": "论文源",
         "initializing": "初始化中...",
-        "init_loading": "正在读取缓存或请求 CVPR Open Access 页面...",
+        "init_loading": "正在读取缓存或请求论文源页面...",
         "open_detail": "打开详情页",
         "open_pdf": "打开 PDF 链接",
         "category": "分类",
@@ -71,14 +72,16 @@ TEXT = {
         "reset_progress_confirm": "确定要清空下载进度、跳过记录和分类记录吗？\n\n当前下载目录和语言设置会保留。",
         "reset_progress_done": "下载进度已重新初始化。",
         "language_switched": "语言已切换。",
+        "source_switched": "论文源已切换。",
     },
     "en": {
-        "app_title": "CVPR Open Access PDF Downloader",
+        "app_title": "Conference Paper PDF Downloader",
         "download_root": "Download Root",
         "choose": "Choose",
         "language": "Language",
+        "paper_source": "Paper Source",
         "initializing": "Initializing...",
-        "init_loading": "Reading cache or requesting CVPR Open Access pages...",
+        "init_loading": "Reading cache or requesting paper source pages...",
         "open_detail": "Open Detail Page",
         "open_pdf": "Open PDF Link",
         "category": "Category",
@@ -127,6 +130,7 @@ TEXT = {
         "reset_progress_confirm": "Clear download progress, skipped items, and classification records?\n\nThe current download root and language setting will be kept.",
         "reset_progress_done": "Download progress has been reset.",
         "language_switched": "Language switched.",
+        "source_switched": "Paper source switched.",
     },
 }
 
@@ -139,6 +143,10 @@ class CVPRDownloaderApp(tk.Tk):
         self.lang = self.state_data.get("language", "zh")
         if self.lang not in TEXT:
             self.lang = "zh"
+        self.paper_sources = get_paper_sources(self.config_data)
+        self.source_names = {source["name"]: source["id"] for source in self.paper_sources}
+        self.source_id_to_name = {source["id"]: source["name"] for source in self.paper_sources}
+        self.source_id = self._initial_source_id()
 
         self.papers = []
         self.categories = []
@@ -161,6 +169,35 @@ class CVPRDownloaderApp(tk.Tk):
         value = TEXT[self.lang].get(key, TEXT["zh"].get(key, key))
         return value.format(**kwargs) if kwargs else value
 
+    def _initial_source_id(self) -> str:
+        selected = self.state_data.get("paper_source") or self.config_data.get("default_paper_source")
+        source = get_paper_source(self.config_data, selected)
+        return source["id"]
+
+    def _default_download_root_for_source(self, source_id: str = "") -> str:
+        source_id = source_id or self.source_id
+        source_name = self.source_id_to_name.get(source_id, source_id)
+        return f"downloads/{source_name}"
+
+    def _is_source_default_download_root(self, path_text: str) -> bool:
+        def normalize(value: str) -> str:
+            return str(Path(value or ""))
+
+        normalized = normalize(path_text)
+        defaults = {
+            "",
+            normalize("downloads"),
+            normalize("downloads/default"),
+        }
+        defaults.update(normalize(str(Path("downloads") / source["name"])) for source in self.paper_sources)
+        return normalized in defaults
+
+    def _initial_download_root(self) -> str:
+        stored = self.state_data.get("download_root") or ""
+        if self._is_source_default_download_root(stored):
+            return self._default_download_root_for_source()
+        return stored
+
     def _label(self, parent, key: str, **kwargs):
         widget = ttk.Label(parent, **kwargs)
         self.i18n_widgets.append((widget, key))
@@ -180,7 +217,7 @@ class CVPRDownloaderApp(tk.Tk):
         top.columnconfigure(1, weight=1)
 
         self._label(top, "download_root").grid(row=0, column=0, sticky="w")
-        self.root_var = tk.StringVar(value=self.state_data.get("download_root") or self.config_data["default_download_root"])
+        self.root_var = tk.StringVar(value=self._initial_download_root())
         ttk.Entry(top, textvariable=self.root_var).grid(row=0, column=1, sticky="ew", padx=8)
         self._button(top, "choose", self.choose_root).grid(row=0, column=2)
         self._label(top, "language").grid(row=0, column=3, sticky="w", padx=(16, 4))
@@ -189,6 +226,12 @@ class CVPRDownloaderApp(tk.Tk):
         self.language_box["values"] = ("zh", "en")
         self.language_box.grid(row=0, column=4, sticky="e")
         self.language_box.bind("<<ComboboxSelected>>", self.change_language)
+        self._label(top, "paper_source").grid(row=1, column=0, sticky="w", pady=(8, 0))
+        self.source_var = tk.StringVar(value=self.source_id_to_name.get(self.source_id, self.source_id))
+        self.source_box = ttk.Combobox(top, textvariable=self.source_var, state="readonly", width=24)
+        self.source_box["values"] = [source["name"] for source in self.paper_sources]
+        self.source_box.grid(row=1, column=1, sticky="w", padx=8, pady=(8, 0))
+        self.source_box.bind("<<ComboboxSelected>>", self.change_paper_source)
 
         paper_frame = ttk.Frame(self, padding=(12, 4, 12, 4))
         paper_frame.grid(row=1, column=0, sticky="ew")
@@ -247,15 +290,33 @@ class CVPRDownloaderApp(tk.Tk):
             return
         self.lang = selected
         self.state_data["language"] = self.lang
+        self.state_data["paper_source"] = self.source_id
         save_state(self.state_data)
         self.apply_language()
         self.init_status_var.set(self.t("language_switched"))
+
+    def change_paper_source(self, _event=None) -> None:
+        selected_name = self.source_var.get()
+        selected_id = self.source_names.get(selected_name)
+        if not selected_id or selected_id == self.source_id:
+            return
+        self.source_id = selected_id
+        self.state_data["paper_source"] = self.source_id
+        self.state_data["current_index"] = 0
+        if self._is_source_default_download_root(self.root_var.get()):
+            self.root_var.set(self._default_download_root_for_source())
+        save_state(self.state_data)
+        self.init_status_var.set(self.t("source_switched"))
+        self._ensure_download_root()
+        self.refresh_categories()
+        self.load_papers_async()
 
     def _ensure_download_root(self) -> Path:
         root = resolve_project_path(self.root_var.get())
         root.mkdir(parents=True, exist_ok=True)
         self.state_data["download_root"] = self.root_var.get()
         self.state_data["language"] = self.lang
+        self.state_data["paper_source"] = self.source_id
         save_state(self.state_data)
         return root
 
@@ -279,7 +340,7 @@ class CVPRDownloaderApp(tk.Tk):
     def _load_papers_worker(self, force: bool) -> None:
         try:
             from_cache = self._has_cached_papers() and not force
-            papers = initialize_papers(self.config_data, force=force)
+            papers = initialize_papers(self.config_data, force=force, source_id=self.source_id)
             self.after(0, lambda: self._finish_load_papers(papers, from_cache))
         except Exception as exc:
             message = str(exc)
@@ -290,10 +351,11 @@ class CVPRDownloaderApp(tk.Tk):
             self.after(0, lambda: setattr(self, "is_busy", False))
 
     def _has_cached_papers(self) -> bool:
-        if not PAPERS_PATH.exists():
+        papers_path = get_papers_path(self.source_id)
+        if not papers_path.exists():
             return False
         try:
-            data = json.loads(PAPERS_PATH.read_text(encoding="utf-8"))
+            data = json.loads(papers_path.read_text(encoding="utf-8"))
             return bool(data)
         except Exception:
             return False
@@ -588,6 +650,7 @@ class CVPRDownloaderApp(tk.Tk):
     def pause_save(self) -> None:
         self.state_data["download_root"] = self.root_var.get()
         self.state_data["language"] = self.lang
+        self.state_data["paper_source"] = self.source_id
         save_state(self.state_data)
         self.update_logs()
         messagebox.showinfo(self.t("saved_title"), self.t("saved"))
@@ -599,6 +662,8 @@ class CVPRDownloaderApp(tk.Tk):
         if not confirmed:
             return
         self.state_data = reset_state(self.root_var.get(), self.lang)
+        self.state_data["paper_source"] = self.source_id
+        save_state(self.state_data)
         self.update_paper_display()
         self.update_logs()
         messagebox.showinfo(self.t("reset_progress_title"), self.t("reset_progress_done"))
@@ -610,6 +675,7 @@ class CVPRDownloaderApp(tk.Tk):
     def on_close(self) -> None:
         self.state_data["download_root"] = self.root_var.get()
         self.state_data["language"] = self.lang
+        self.state_data["paper_source"] = self.source_id
         save_state(self.state_data)
         self.destroy()
 

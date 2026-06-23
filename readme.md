@@ -1,14 +1,14 @@
-# CVPR Open Access PDF Downloader
+# Conference Paper PDF Downloader
 
-A local desktop tool with a Tkinter GUI for browsing, classifying, and downloading CVPR Open Access papers. Parse paper metadata from the CVF website, cache it locally, and save PDFs into custom category folders through user-controlled, rate-limited workflows.
-> **Note:** Defaults target [CVPR 2026](https://openaccess.thecvf.com/CVPR2026). To use another year, update `conference_url` in `config.json` and reinitialize the paper list.
+A local desktop tool with a Tkinter GUI for browsing, classifying, and downloading conference papers. Parse paper metadata from configured paper sources, cache it locally, and save PDFs into custom category folders through user-controlled, rate-limited workflows.
+> **Note:** Paper sources are configured in the `paper_sources` list in `config.json`.
 
 ![Open Access PDF Downloader GUI](data/GUI.png)
 
 ## How It Works
 
-1. On startup, load cached papers from `data/papers.json` if available.
-2. If the cache is empty, crawl the conference homepage in a background thread, resolve the *All Papers* link, and parse `title`, `detail_url`, and `pdf_url` for each paper.
+1. On startup, load cached papers for the selected source, such as `data/papers.json` or `data/papers_icml2024.json`, if available.
+2. If the cache is empty, crawl the selected paper source in a background thread and parse `title`, `detail_url`, and `pdf_url` for each paper.
 3. Use the GUI to step through papers, assign categories, and download PDFs.
 4. Optionally run **Auto Classify** to apply user-provided categories from `data/papers_with_categories.json` and download papers with the configured rate limits.
 5. Progress and preferences persist in `data/state.json`.
@@ -70,7 +70,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-On first launch with an empty cache, the app initializes the paper list in the background and writes results to `data/papers.json`. A status message appears when initialization completes; a dialog is shown after a fresh or manual reinitialization.
+On first launch with an empty cache, the app initializes the selected paper source in the background and writes results to the source-specific cache file. A status message appears when initialization completes; a dialog is shown after a fresh or manual reinitialization.
 
 ## Test Mode
 
@@ -80,7 +80,7 @@ For a quick smoke test, limit parsing in `config.json`:
 "paper_parse_limit": 10
 ```
 
-This parses only the first 10 papers so you can inspect `data/papers.json` quickly.
+This parses only the first 10 papers so you can inspect the source-specific cache file quickly.
 
 For a full crawl, set:
 
@@ -96,11 +96,30 @@ Settings live in `config.json`:
 
 ```json
 {
-  "conference_url": "https://openaccess.thecvf.com/CVPR2026",
-  "fallback_all_papers_urls": [
-    "https://openaccess.thecvf.com/CVPR2026?day=all"
+  "default_paper_source": "cvpr2026",
+  "paper_sources": [
+    {
+      "id": "cvpr2026",
+      "name": "CVPR 2026",
+      "type": "cvf_openaccess",
+      "conference_url": "https://openaccess.thecvf.com/CVPR2026",
+      "fallback_all_papers_urls": [
+        "https://openaccess.thecvf.com/CVPR2026?day=all"
+      ]
+    },
+    {
+      "id": "icml2025",
+      "name": "ICML 2025",
+      "type": "dblp_pmlr",
+      "conference_url": "https://dblp.uni-trier.de/db/conf/icml/icml2025.html"
+    },
+    {
+      "id": "iclr2025",
+      "name": "ICLR 2025",
+      "type": "dblp_openreview",
+      "conference_url": "https://dblp.uni-trier.de/db/conf/iclr/iclr2025.html"
+    }
   ],
-  "default_download_root": "downloads/default",
   "paper_parse_limit": 0,
   "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CVPR2026Downloader/1.0",
   "request_delay_seconds": [2, 6],
@@ -111,8 +130,9 @@ Settings live in `config.json`:
 
 Notes:
 
-- The app does **not** hard-code `?day=all` as the primary entry point—it parses the conference homepage for an *All Papers* link first.
-- `fallback_all_papers_urls` is used only when homepage discovery fails or yields no papers.
+- Each entry in `paper_sources` must define `id`, `name`, `type`, and `conference_url`.
+- Supported source types are `cvf_openaccess`, `dblp_pmlr`, and `dblp_openreview`.
+- For `cvf_openaccess`, `fallback_all_papers_urls` is used only when homepage discovery fails or yields no papers.
 
 ## Automatic Classification
 

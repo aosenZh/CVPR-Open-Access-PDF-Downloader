@@ -1,9 +1,40 @@
 {
-  "conference_url": "https://openaccess.thecvf.com/CVPR2026",
-  "fallback_all_papers_urls": [
-    "https://openaccess.thecvf.com/CVPR2026?day=all"
+  "default_paper_source": "cvpr2026",
+  "paper_sources": [
+    {
+      "id": "cvpr2026",
+      "name": "CVPR 2026",
+      "type": "cvf_openaccess",
+      "conference_url": "https://openaccess.thecvf.com/CVPR2026",
+      "fallback_all_papers_urls": [
+        "https://openaccess.thecvf.com/CVPR2026?day=all"
+      ]
+    },
+    {
+      "id": "icml2024",
+      "name": "ICML 2024",
+      "type": "dblp_pmlr",
+      "conference_url": "https://dblp.uni-trier.de/db/conf/icml/icml2024.html"
+    },
+    {
+      "id": "icml2025",
+      "name": "ICML 2025",
+      "type": "dblp_pmlr",
+      "conference_url": "https://dblp.uni-trier.de/db/conf/icml/icml2025.html"
+    },
+    {
+      "id": "iclr2024",
+      "name": "ICLR 2024",
+      "type": "dblp_openreview",
+      "conference_url": "https://dblp.uni-trier.de/db/conf/iclr/iclr2024.html"
+    },
+    {
+      "id": "iclr2025",
+      "name": "ICLR 2025",
+      "type": "dblp_openreview",
+      "conference_url": "https://dblp.uni-trier.de/db/conf/iclr/iclr2025.html"
+    }
   ],
-  "default_download_root": "downloads/default",
   "paper_parse_limit": 0,
   "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CVPR2026Downloader/1.0",
   "request_delay_seconds": [2, 6],
