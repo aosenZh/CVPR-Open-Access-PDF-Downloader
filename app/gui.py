@@ -5,6 +5,7 @@ import webbrowser
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
+from .categories import existing_categories_path, generate_api_categories, generate_keyword_categories, get_categories_path
 from .crawler import get_paper_source, get_paper_sources, get_papers_path, initialize_papers
 from .downloader import download_pdf
 from .state import load_state, record_download, reset_state, save_state, set_current_index
@@ -12,7 +13,6 @@ from .utils import PROJECT_ROOT, clean_filename, log_error, recent_logs, resolve
 
 
 CONFIG_PATH = PROJECT_ROOT / "config.json"
-PAPERS_WITH_CATEGORIES_PATH = PROJECT_ROOT / "data" / "papers_with_categories.json"
 
 
 TEXT = {
@@ -59,8 +59,19 @@ TEXT = {
         "auto_running_progress": "自动分类下载中：{index} / {total} -> {category}",
         "auto_stop_requested": "已请求中止自动分类；当前 PDF 下载完成后停止。",
         "category_file_missing": "未找到分类文件：{path}",
-        "category_file_list": "papers_with_categories.json 必须是论文对象列表。",
-        "category_missing": "papers_with_categories.json 中没有可用的 category 字段。",
+        "category_file_list": "分类 JSON 必须是论文对象列表。",
+        "category_missing": "分类 JSON 中没有可用的 category 字段。",
+        "category_strategy_title": "选择分类方式",
+        "category_strategy_prompt": "未找到当前论文源的分类文件：\n{path}\n\n请选择分类方式。",
+        "category_strategy_keyword": "根据关键词规则匹配分类",
+        "category_strategy_api": "调用API进行分类",
+        "category_strategy_manual": "自行分类",
+        "category_strategy_cancel": "取消",
+        "keyword_classifying": "正在根据关键词规则生成分类文件...",
+        "keyword_done": "已生成分类文件：{path}\n共 {count} 篇论文。",
+        "api_classifying": "正在提交 Batch API 分类任务...",
+        "api_done": "API 分类完成，已生成分类文件：{path}",
+        "manual_category_hint": "请将当前论文源缓存文件提交给 AI 生成分类 JSON，并保存为：\n{path}",
         "overwrite_auto": "{filename} 已存在。\n\n是：覆盖\n否：跳过该论文\n取消：中止自动分类",
         "auto_stopped_title": "自动分类已中止",
         "auto_stopped": "自动分类已中止。已下载 {downloaded} 篇，跳过 {skipped} 篇，失败 {failed} 篇。",
@@ -117,8 +128,19 @@ TEXT = {
         "auto_running_progress": "Auto downloading: {index} / {total} -> {category}",
         "auto_stop_requested": "Stop requested; the app will stop after the current PDF finishes.",
         "category_file_missing": "Category file not found: {path}",
-        "category_file_list": "papers_with_categories.json must be a list of paper objects.",
-        "category_missing": "No usable category field found in papers_with_categories.json.",
+        "category_file_list": "The category JSON must be a list of paper objects.",
+        "category_missing": "No usable category field found in the category JSON.",
+        "category_strategy_title": "Choose Classification Method",
+        "category_strategy_prompt": "No category file was found for the current paper source:\n{path}\n\nChoose a classification method.",
+        "category_strategy_keyword": "Keyword Rules",
+        "category_strategy_api": "API Classification",
+        "category_strategy_manual": "Manual Classification",
+        "category_strategy_cancel": "Cancel",
+        "keyword_classifying": "Generating categories with keyword rules...",
+        "keyword_done": "Generated category file: {path}\nTotal papers: {count}.",
+        "api_classifying": "Submitting Batch API classification job...",
+        "api_done": "API classification complete. Generated category file: {path}",
+        "manual_category_hint": "Upload the current paper cache to AI, generate a categorized JSON file, and save it as:\n{path}",
         "overwrite_auto": "{filename} already exists.\n\nYes: overwrite\nNo: skip this paper\nCancel: stop auto classification",
         "auto_stopped_title": "Auto Classification Stopped",
         "auto_stopped": "Auto classification stopped. Downloaded {downloaded}, skipped {skipped}, failed {failed}.",
@@ -162,7 +184,7 @@ class CVPRDownloaderApp(tk.Tk):
         self.apply_language()
         self._ensure_download_root()
         self.refresh_categories()
-        self.load_papers_async()
+        self.load_cached_papers()
         self.protocol("WM_DELETE_WINDOW", self.on_close)
 
     def t(self, key: str, **kwargs) -> str:
@@ -309,7 +331,8 @@ class CVPRDownloaderApp(tk.Tk):
         self.init_status_var.set(self.t("source_switched"))
         self._ensure_download_root()
         self.refresh_categories()
-        self.load_papers_async()
+        self.papers = []
+        self.load_cached_papers()
 
     def _ensure_download_root(self) -> Path:
         root = resolve_project_path(self.root_var.get())
@@ -327,6 +350,26 @@ class CVPRDownloaderApp(tk.Tk):
         if index >= len(self.papers):
             return None
         return self.papers[index]
+
+    def load_cached_papers(self) -> None:
+        papers_path = get_papers_path(self.source_id)
+        self.papers = []
+        if papers_path.exists():
+            try:
+                data = json.loads(papers_path.read_text(encoding="utf-8"))
+                if isinstance(data, list):
+                    self.papers = data
+                    set_current_index(self.state_data, int(self.state_data.get("current_index", 0)), len(self.papers))
+                    save_state(self.state_data)
+                    self.update_paper_display()
+                    self.init_status_var.set(self.t("loaded_cache", count=len(self.papers)))
+                    return
+            except Exception as exc:
+                message = str(exc)
+                log_error(f"Could not load cached papers {papers_path}: {message}")
+                self.update_logs()
+        self.update_paper_display()
+        self.init_status_var.set(self.t("auto_no_papers"))
 
     def load_papers_async(self, force: bool = False) -> None:
         if self.is_busy:
@@ -491,6 +534,9 @@ class CVPRDownloaderApp(tk.Tk):
             messagebox.showwarning(self.t("auto_cannot_start"), self.t("auto_no_papers"))
             return
         try:
+            if not existing_categories_path(self.source_id).exists():
+                if not self.prepare_categories_for_auto_classify():
+                    return
             category_map = self.load_category_map()
         except Exception as exc:
             log_error(str(exc))
@@ -509,10 +555,90 @@ class CVPRDownloaderApp(tk.Tk):
         self.auto_stop_event.set()
         self.init_status_var.set(self.t("auto_stop_requested"))
 
+    def ask_category_strategy(self, missing_path: Path) -> str:
+        dialog = tk.Toplevel(self)
+        dialog.title(self.t("category_strategy_title"))
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.resizable(False, False)
+        result = {"value": ""}
+
+        frame = ttk.Frame(dialog, padding=16)
+        frame.grid(row=0, column=0, sticky="nsew")
+        ttk.Label(
+            frame,
+            text=self.t("category_strategy_prompt", path=missing_path),
+            wraplength=520,
+            justify="left",
+        ).grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 12))
+
+        def choose(value: str) -> None:
+            result["value"] = value
+            dialog.destroy()
+
+        ttk.Button(frame, text=self.t("category_strategy_keyword"), command=lambda: choose("keyword")).grid(row=1, column=0, padx=(0, 8))
+        ttk.Button(frame, text=self.t("category_strategy_api"), command=lambda: choose("api")).grid(row=1, column=1, padx=8)
+        ttk.Button(frame, text=self.t("category_strategy_manual"), command=lambda: choose("manual")).grid(row=1, column=2, padx=8)
+        ttk.Button(frame, text=self.t("category_strategy_cancel"), command=lambda: choose("")).grid(row=1, column=3, padx=(8, 0))
+
+        dialog.protocol("WM_DELETE_WINDOW", lambda: choose(""))
+        dialog.update_idletasks()
+        x = self.winfo_rootx() + max(0, (self.winfo_width() - dialog.winfo_width()) // 2)
+        y = self.winfo_rooty() + max(0, (self.winfo_height() - dialog.winfo_height()) // 2)
+        dialog.geometry(f"+{x}+{y}")
+        self.wait_window(dialog)
+        return result["value"]
+
+    def prepare_categories_for_auto_classify(self) -> bool:
+        target_path = get_categories_path(self.source_id)
+        strategy = self.ask_category_strategy(target_path)
+        if strategy == "keyword":
+            self.init_status_var.set(self.t("keyword_classifying"))
+            self.update_idletasks()
+            path, _counts = generate_keyword_categories(self.source_id, self.papers)
+            self.init_status_var.set(self.t("keyword_done", path=path, count=len(self.papers)))
+            messagebox.showinfo(self.t("init_done_title"), self.t("keyword_done", path=path, count=len(self.papers)))
+            return True
+        if strategy == "api":
+            self.start_api_classification()
+            return False
+        if strategy == "manual":
+            messagebox.showinfo(self.t("category_strategy_title"), self.t("manual_category_hint", path=target_path))
+            return False
+        return False
+
+    def start_api_classification(self) -> None:
+        self.is_busy = True
+        self.init_status_var.set(self.t("api_classifying"))
+        papers = list(self.papers)
+        thread = threading.Thread(target=self._api_classification_worker, args=(papers,), daemon=True)
+        thread.start()
+
+    def _api_classification_worker(self, papers: list) -> None:
+        try:
+            def report(message: str) -> None:
+                self.after(0, lambda msg=message: self.init_status_var.set(msg))
+
+            path = generate_api_categories(self.source_id, papers, self.config_data, status_callback=report)
+            self.after(0, lambda p=path: self._finish_api_classification(p))
+        except Exception as exc:
+            message = str(exc)
+            log_error(message)
+            self.after(0, lambda msg=message: messagebox.showerror(self.t("auto_failed"), msg))
+            self.after(0, self.update_logs)
+            self.after(0, lambda: setattr(self, "is_busy", False))
+
+    def _finish_api_classification(self, path: Path) -> None:
+        self.is_busy = False
+        self.init_status_var.set(self.t("api_done", path=path))
+        messagebox.showinfo(self.t("category_strategy_title"), self.t("api_done", path=path))
+        self.start_auto_classify()
+
     def load_category_map(self) -> dict:
-        if not PAPERS_WITH_CATEGORIES_PATH.exists():
-            raise FileNotFoundError(self.t("category_file_missing", path=PAPERS_WITH_CATEGORIES_PATH))
-        data = json.loads(PAPERS_WITH_CATEGORIES_PATH.read_text(encoding="utf-8"))
+        categories_path = existing_categories_path(self.source_id)
+        if not categories_path.exists():
+            raise FileNotFoundError(self.t("category_file_missing", path=categories_path))
+        data = json.loads(categories_path.read_text(encoding="utf-8"))
         if not isinstance(data, list):
             raise ValueError(self.t("category_file_list"))
 

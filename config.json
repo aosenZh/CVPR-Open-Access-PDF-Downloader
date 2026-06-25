@@ -36,6 +36,12 @@
     }
   ],
   "paper_parse_limit": 0,
+  "llm_classification": {
+    "model": "gpt-4o-mini",
+    "batch_size": 20,
+    "poll_interval_seconds": 60,
+    "max_wait_seconds": 86400
+  },
   "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CVPR2026Downloader/1.0",
   "request_delay_seconds": [2, 6],
   "post_download_delay_seconds": [3, 8],

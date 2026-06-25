@@ -1,54 +1,33 @@
 # Conference Paper PDF Downloader
 
-A local desktop tool with a Tkinter GUI for browsing, classifying, and downloading conference papers. Parse paper metadata from configured paper sources, cache it locally, and save PDFs into custom category folders through user-controlled, rate-limited workflows.
-> **Note:** Paper sources are configured in the `paper_sources` list in `config.json`.
+A local Tkinter desktop tool for browsing, classifying, and downloading conference papers from configurable sources such as CVPR, ICML, and ICLR.
 
-![Open Access PDF Downloader GUI](data/GUI.png)
+The app crawls a selected paper source, caches paper metadata locally, supports manual and automatic categorization, and downloads PDFs into category folders with conservative request delays.
+
+## Supported Sources
+
+Sources are configured in `config.json` under `paper_sources`.
+
+Current source types:
+
+- `cvf_openaccess`: CVF Open Access pages, currently used for CVPR 2026.
+- `dblp_pmlr`: DBLP conference pages whose paper links point to PMLR pages, currently used for ICML 2024 and ICML 2025.
+- `dblp_openreview`: DBLP conference pages whose paper links point to OpenReview forum pages, currently used for ICLR 2024 and ICLR 2025.
 
 ## How It Works
 
-1. On startup, load cached papers for the selected source, such as `data/papers.json` or `data/papers_icml2024.json`, if available.
-2. If the cache is empty, crawl the selected paper source in a background thread and parse `title`, `detail_url`, and `pdf_url` for each paper.
-3. Use the GUI to step through papers, assign categories, and download PDFs.
-4. Optionally run **Auto Classify** to apply user-provided categories from `data/papers_with_categories.json` and download papers with the configured rate limits.
-5. Progress and preferences persist in `data/state.json`.
-
-Use **重新初始化论文列表** / **Reinitialize Paper List** when you need to rebuild `data/papers.json`. The crawler validates parsed PDF URLs and refuses to cache results when all PDF links collapse to the same URL.
-
-Use **重新初始化下载进度** / **Reset Progress** to reset `data/state.json` download progress and records while keeping the current download root and language preference.
-
-## Project Structure
-
-```text
-cvpr_downloader/
-├── main.py                 # Entry point
-├── config.json             # Crawler & download settings
-├── requirements.txt
-├── app/
-│   ├── crawler.py          # Paper list discovery & parsing
-│   ├── downloader.py       # PDF download logic
-│   ├── gui.py              # Tkinter UI
-│   ├── state.py            # Progress persistence
-│   └── utils.py
-├── data/
-│   ├── papers.json         # Cached paper metadata
-│   ├── papers_with_categories.json  # Labels for auto-classify
-│   ├── state.json          # UI state & download records
-│   └── logs.txt
-└── downloads/              # Saved PDFs (by category)
-    ├── 3D Vision and Scene Reconstruction/
-    ├── Image and video generation/
-    └── ...
-```
-
-## Prerequisites
-
-- Python **3.9+**
-- Network access to [openaccess.thecvf.com](https://openaccess.thecvf.com)
+1. Choose a paper source in the GUI.
+2. On startup or source switch, the app loads the selected source's local cache if it exists. It does not automatically crawl the web.
+3. Click **Reinitialize Paper List**/**重新初始化论文列表** to crawl or rebuild the selected source's cache.
+4. Browse papers, skip papers, open detail/PDF links, or download one paper into the selected category.
+5. Click **Auto Classify**/**自动分类** to load or create a source-specific category file, then download papers automatically.
+6. Progress, skipped items, records, language, selected source, and download root are saved in `data/state.json`.
 
 ## Installation
 
-### Windows
+Python 3.9+ is recommended.
+
+Windows
 
 ```powershell
 python -m venv venv
@@ -56,9 +35,9 @@ python -m venv venv
 pip install -r requirements.txt
 ```
 
-### macOS / Linux
+macOS / Linux
 
-```bash
+```powershell
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -66,33 +45,52 @@ pip install -r requirements.txt
 
 ## Quick Start
 
-```bash
+```powershell
 python main.py
 ```
 
-On first launch with an empty cache, the app initializes the selected paper source in the background and writes results to the source-specific cache file. A status message appears when initialization completes; a dialog is shown after a fresh or manual reinitialization.
+### Reinitializing Paper Lists
 
-## Test Mode
+Click **Reinitialize Paper List**/**重新初始化论文列表** after selecting a source. The app then crawls the source page, parses `title`, `detail_url`, and `pdf_url`, which are saved as `data/papers_<source_id>.json` (Example: `data/papers_example.json`)
 
-For a quick smoke test, limit parsing in `config.json`:
+### Automatic Classification
 
-```json
-"paper_parse_limit": 10
+Click **Auto Classify**/**自动分类** after a paper list is loaded.
+
+The app first looks for the selected source's category JSON. If it exists, auto downloading starts immediately.
+
+If the category file is missing, the app offers three choices.
+
+- Keyword Rules
+
+Uses `data/research_categories_keywords.json` to generate `data/papers_<source_id>_with_categories.json`.
+
+- API Classification
+
+Uses OpenAI Batch API and `data/research_categories_LLM.json` to generate `data/papers_<source_id>_with_categories.json`.
+
+Before using it, set:
+
+```powershell
+$env:OPENAI_API_KEY="your_api_key"
+python main.py
 ```
 
-This parses only the first 10 papers so you can inspect the source-specific cache file quickly.
+- Manual Classification
 
-For a full crawl, set:
+Choose manual classification if you want to upload the source paper cache to an AI tool yourself.
 
-```json
-"paper_parse_limit": 0
+Save the categorized JSON as:
+
+```text
+data/papers_<source_id>_with_categories.json
 ```
 
-Then click **Reinitialize Paper List** / **重新初始化论文列表** in the GUI to rebuild the cache.
+Then click **Auto Classify** again.
 
 ## Configuration
 
-Settings live in `config.json`:
+Settings live in `config.json`.
 
 ```json
 {
@@ -121,6 +119,12 @@ Settings live in `config.json`:
     }
   ],
   "paper_parse_limit": 0,
+  "llm_classification": {
+    "model": "gpt-4o-mini",
+    "batch_size": 20,
+    "poll_interval_seconds": 60,
+    "max_wait_seconds": 86400
+  },
   "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CVPR2026Downloader/1.0",
   "request_delay_seconds": [2, 6],
   "post_download_delay_seconds": [3, 8],
@@ -130,42 +134,16 @@ Settings live in `config.json`:
 
 Notes:
 
-- Each entry in `paper_sources` must define `id`, `name`, `type`, and `conference_url`.
-- Supported source types are `cvf_openaccess`, `dblp_pmlr`, and `dblp_openreview`.
-- For `cvf_openaccess`, `fallback_all_papers_urls` is used only when homepage discovery fails or yields no papers.
-
-## Automatic Classification
-
-The GUI provides:
-
-- **Auto Classify** / **自动分类** — read `category` from `data/papers_with_categories.json` and download into matching folders
-- **Stop Auto** / **中止自动分类** — request a stop; the app halts after the current PDF and its post-download delay finish
-
-The bundled `data/papers_with_categories.json` was generated with ChatGPT for CVPR 2026 paper categorization. You may provide your own `data/papers_with_categories.json` for category-based organization.
-
-`papers_with_categories.json` is a JSON array. Each entry needs `category` and at least one of `title` or `detail_url`:
-
-```json
-{
-  "title": "Example Paper Title",
-  "detail_url": "https://openaccess.thecvf.com/content/CVPR2026/html/example.html",
-  "pdf_url": "https://openaccess.thecvf.com/content/CVPR2026/papers/example.pdf",
-  "category_id": 3,
-  "category": "3D Vision and Reconstruction"
-}
-```
-
-## Disclaimer
-
-This is an independent, unofficial tool for personal research organization. It is not affiliated with or endorsed by CVF, CVPR, IEEE, or any conference organizer.
-
-The tool does not host, redistribute, modify, or remove watermarks from any papers. All copyrights remain with their respective authors or copyright holders. Users are responsible for complying with applicable website terms, copyright restrictions, and local requirements.
-
-Please use conservative request rates and avoid concurrent or high-volume downloads. The maintainers are not responsible for misuse, access restrictions, service interruptions, downloaded content, or consequences arising from automated requests.
+- Each source must define `id`, `name`, `type`, and `conference_url`.
+- `paper_parse_limit: 0` means parse all available papers.
+- For quick tests, set `paper_parse_limit` to a small number such as `10`.
+- `llm_classification.batch_size` is clamped to 20-30 papers per Batch request group.
 
 ## Responsible Use
 
-Before using the tool, review the CVF Open Access website and any applicable terms, policies, or access restrictions. By default, this tool is designed to process papers one at a time with user confirmation. Do not use it for aggressive crawling, concurrent downloads, mirroring, redistribution, or any activity that may place excessive load on the CVF Open Access website.
+This is an unofficial personal research organization tool. It is not affiliated with CVF, DBLP, PMLR or any conference organizer.
+
+Use conservative request rates. Do not use the tool for aggressive crawling, mirroring, redistribution, or behavior that may violate website terms or copyright requirements.
 
 ## License
 

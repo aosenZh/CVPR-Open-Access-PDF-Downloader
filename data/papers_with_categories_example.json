@@ -1,0 +1,37 @@
+[
+  {
+    "title": "Implicit Regularization for Tubal Tensor Factorizations via Gradient Descent",
+    "detail_url": "https://proceedings.mlr.press/v267/karnik25a.html",
+    "pdf_url": "https://raw.githubusercontent.com/mlresearch/v267/main/assets/karnik25a/karnik25a.pdf",
+    "category_id": 42,
+    "category": "计算学习、算法与离散优化"
+  },
+  {
+    "title": "Algorithm Development in Neural Networks: Insights from the Streaming Parity Task",
+    "detail_url": "https://proceedings.mlr.press/v267/van-rossem25a.html",
+    "pdf_url": "https://raw.githubusercontent.com/mlresearch/v267/main/assets/van-rossem25a/van-rossem25a.pdf",
+    "category_id": 40,
+    "category": "深度学习架构与神经网络方法"
+  },
+  {
+    "title": "Orthogonal Subspace Decomposition for Generalizable AI-Generated Image Detection",
+    "detail_url": "https://proceedings.mlr.press/v267/yan25b.html",
+    "pdf_url": "https://raw.githubusercontent.com/mlresearch/v267/main/assets/yan25b/yan25b.pdf",
+    "category_id": 37,
+    "category": "网络安全、伪造检测与内容安全"
+  },
+  {
+    "title": "Accelerating LLM Inference with Lossless Speculative Decoding Algorithms for Heterogeneous Vocabularies",
+    "detail_url": "https://proceedings.mlr.press/v267/timor25a.html",
+    "pdf_url": "https://raw.githubusercontent.com/mlresearch/v267/main/assets/timor25a/timor25a.pdf",
+    "category_id": 1,
+    "category": "大语言模型与基础模型"
+  },
+  {
+    "title": "LLM-SRBench: A New Benchmark for Scientific Equation Discovery with Large Language Models",
+    "detail_url": "https://proceedings.mlr.press/v267/shojaee25a.html",
+    "pdf_url": "https://raw.githubusercontent.com/mlresearch/v267/main/assets/shojaee25a/shojaee25a.pdf",
+    "category_id": 1,
+    "category": "大语言模型与基础模型"
+  }
+]

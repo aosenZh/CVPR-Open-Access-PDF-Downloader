@@ -10,17 +10,12 @@ from bs4 import BeautifulSoup
 from .utils import PROJECT_ROOT, load_json, log_error, save_json
 
 
-PAPERS_PATH = PROJECT_ROOT / "data" / "papers.json"
-
-
 def _safe_source_id(source_id: str) -> str:
     safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", source_id).strip("._")
     return safe or "default"
 
 
 def get_papers_path(source_id: str = ""):
-    if not source_id or source_id == "cvpr2026":
-        return PAPERS_PATH
     return PROJECT_ROOT / "data" / f"papers_{_safe_source_id(source_id)}.json"
 
 
