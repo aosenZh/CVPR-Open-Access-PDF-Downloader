@@ -2,6 +2,24 @@
   "default_paper_source": "cvpr2026",
   "paper_sources": [
     {
+      "id": "cvpr2024",
+      "name": "CVPR 2024",
+      "type": "cvf_openaccess",
+      "conference_url": "https://openaccess.thecvf.com/CVPR2024",
+      "fallback_all_papers_urls": [
+        "https://openaccess.thecvf.com/CVPR2024?day=all"
+      ]
+    },
+    {
+      "id": "cvpr2025",
+      "name": "CVPR 2025",
+      "type": "cvf_openaccess",
+      "conference_url": "https://openaccess.thecvf.com/CVPR2025",
+      "fallback_all_papers_urls": [
+        "https://openaccess.thecvf.com/CVPR2025?day=all"
+      ]
+    },
+    {
       "id": "cvpr2026",
       "name": "CVPR 2026",
       "type": "cvf_openaccess",

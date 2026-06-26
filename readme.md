@@ -10,7 +10,7 @@ Sources are configured in `config.json` under `paper_sources`.
 
 Current source types:
 
-- `cvf_openaccess`: CVF Open Access pages, currently used for CVPR 2026.
+- `cvf_openaccess`: CVF Open Access pages, currently used for CVPR 2024, CVPR 2025, and CVPR 2026.
 - `dblp_pmlr`: DBLP conference pages whose paper links point to PMLR pages, currently used for ICML 2024 and ICML 2025.
 - `dblp_openreview`: DBLP conference pages whose paper links point to OpenReview forum pages, currently used for ICLR 2024 and ICLR 2025.
 
@@ -96,6 +96,24 @@ Settings live in `config.json`.
 {
   "default_paper_source": "cvpr2026",
   "paper_sources": [
+    {
+      "id": "cvpr2024",
+      "name": "CVPR 2024",
+      "type": "cvf_openaccess",
+      "conference_url": "https://openaccess.thecvf.com/CVPR2024",
+      "fallback_all_papers_urls": [
+        "https://openaccess.thecvf.com/CVPR2024?day=all"
+      ]
+    },
+    {
+      "id": "cvpr2025",
+      "name": "CVPR 2025",
+      "type": "cvf_openaccess",
+      "conference_url": "https://openaccess.thecvf.com/CVPR2025",
+      "fallback_all_papers_urls": [
+        "https://openaccess.thecvf.com/CVPR2025?day=all"
+      ]
+    },
     {
       "id": "cvpr2026",
       "name": "CVPR 2026",
