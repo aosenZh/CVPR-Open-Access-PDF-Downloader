@@ -9,7 +9,7 @@ from .categories import existing_categories_path, generate_api_categories, gener
 from .crawler import get_paper_source, get_paper_sources, get_papers_path, initialize_papers
 from .downloader import download_pdf
 from .state import load_state, record_download, reset_state, save_state, set_current_index
-from .utils import PROJECT_ROOT, clean_filename, log_error, recent_logs, resolve_project_path
+from .utils import PROJECT_ROOT, clean_filename, clear_logs, log_error, recent_logs, resolve_project_path
 
 
 CONFIG_PATH = PROJECT_ROOT / "config.json"
@@ -38,6 +38,7 @@ TEXT = {
         "reinitialize": "重新初始化论文列表",
         "reset_progress": "重新初始化下载进度",
         "recent_logs": "最近日志",
+        "clear_logs": "清空日志",
         "init_failed": "初始化失败",
         "loaded_cache": "已从缓存加载 {count} 篇论文。",
         "init_done": "论文列表初始化完成，已缓存 {count} 篇论文。",
@@ -107,6 +108,7 @@ TEXT = {
         "reinitialize": "Reinitialize Paper List",
         "reset_progress": "Reset Progress",
         "recent_logs": "Recent Logs",
+        "clear_logs": "Clear Logs",
         "init_failed": "Initialization Failed",
         "loaded_cache": "Loaded {count} papers from cache.",
         "init_done": "Paper list initialized and cached with {count} papers.",
@@ -294,9 +296,10 @@ class CVPRDownloaderApp(tk.Tk):
         self.log_frame = ttk.LabelFrame(self, padding=8)
         self.log_frame.grid(row=5, column=0, sticky="nsew", padx=12, pady=(4, 12))
         self.log_frame.columnconfigure(0, weight=1)
-        self.log_frame.rowconfigure(0, weight=1)
+        self.log_frame.rowconfigure(1, weight=1)
+        self._button(self.log_frame, "clear_logs", self.clear_log_file).grid(row=0, column=0, sticky="e", pady=(0, 6))
         self.log_text = tk.Text(self.log_frame, height=8, wrap="word")
-        self.log_text.grid(row=0, column=0, sticky="nsew")
+        self.log_text.grid(row=1, column=0, sticky="nsew")
         self.update_logs()
 
     def apply_language(self) -> None:
@@ -797,6 +800,10 @@ class CVPRDownloaderApp(tk.Tk):
     def update_logs(self) -> None:
         self.log_text.delete("1.0", tk.END)
         self.log_text.insert("1.0", recent_logs())
+
+    def clear_log_file(self) -> None:
+        clear_logs()
+        self.update_logs()
 
     def on_close(self) -> None:
         self.state_data["download_root"] = self.root_var.get()

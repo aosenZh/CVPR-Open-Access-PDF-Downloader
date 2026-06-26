@@ -87,7 +87,7 @@ def find_all_papers_url(home_html: str, home_url: str) -> Optional[str]:
 
 
 def _is_paper_detail_href(href: str) -> bool:
-    return "content/CVPR2026/html/" in href and href.endswith(".html")
+    return bool(re.search(r"content/[A-Za-z]+[0-9]{4}/html/[^/]+\.html(?:$|[?#])", href))
 
 
 def _derived_pdf_url(detail_url: str) -> str:

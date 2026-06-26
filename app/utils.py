@@ -55,3 +55,8 @@ def recent_logs(limit: int = 20) -> str:
         return ""
     lines = LOG_FILE.read_text(encoding="utf-8", errors="replace").splitlines()
     return "\n".join(lines[-limit:])
+
+
+def clear_logs() -> None:
+    ensure_dirs()
+    LOG_FILE.write_text("", encoding="utf-8")
